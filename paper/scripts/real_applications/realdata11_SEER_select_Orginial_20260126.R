@@ -32,13 +32,9 @@ Paindata_Use = readRDS("/work/users/{o}/{n}/{onyen}/Permfit_Sim/Realdata11/SEER_
 
 #colnames(Paindata_Use)[48:49] = c("OS_MONTHS","OS_STATUS")
 
-for (i in c(11,20,25)) {
-  Paindata_Use[,i] = (Paindata_Use[,i]-mean(Paindata_Use[,i],na.rm = T))/sd(Paindata_Use[,i],na.rm = T)
-}
+# Make zero survival times positive before splitting, regardless of event status.
+Paindata_Use$OS_MONTHS[which(Paindata_Use$OS_MONTHS == 0)] = 0.1
 
-PainData = importDnnetSurv(x = Paindata_Use[,c(1:20,23:27)],
-                           y = Paindata_Use$OS_MONTHS,
-                           e = Paindata_Use$OS_STATUS)
 use_seed = 256 +start.seed
 set.seed(use_seed)
 
@@ -49,28 +45,38 @@ valid_id = which(c(1:nrow(Paindata_Use)) %in% train_id == F)
 trainN = paste(Fold_Name,Folder_args,"/traindata","_",use_seed,".rds",sep = "")
 validN = paste(Fold_Name,Folder_args,"/validdata","_",use_seed,".rds",sep = "")
 
-if (trainN %in% 
-    list.files(paste(Fold_Name,Folder_args,sep = ""),full.names = T) == F){
-  PainData_train = importDnnetSurv(x = Paindata_Use[train_id,c(1:20,23:27)],
-                                   y = Paindata_Use[train_id,"OS_MONTHS"],
-                                   e = Paindata_Use[train_id,"OS_STATUS"])
-  
-  PainData_valid = importDnnetSurv(x = Paindata_Use[valid_id,c(1:20,23:27)],
-                                   y = Paindata_Use[valid_id,"OS_MONTHS"],
-                                   e = Paindata_Use[valid_id,"OS_STATUS"])
-  
-  saveRDS(Paindata_Use[train_id,],file = paste(Fold_Name,Folder_args,"/traindata","_",use_seed,".rds",sep = ""))
-  saveRDS(Paindata_Use[valid_id,],file = paste(Fold_Name,Folder_args,"/validdata","_",use_seed,".rds",sep = ""))
-}else{
+if (!file.exists(trainN) || !file.exists(validN)) {
+  Ptrain = Paindata_Use[train_id,]
+  Pvalid = Paindata_Use[valid_id,]
+  # Save unstandardized splits; each script scales them in memory.
+  saveRDS(Ptrain, file = trainN)
+  saveRDS(Pvalid, file = validN)
+} else {
   Ptrain = readRDS(trainN)
   Pvalid = readRDS(validN)
-  PainData_train = importDnnetSurv(x = Ptrain[,c(1:20,23:27)],
-                                   y = Ptrain[,"OS_MONTHS"],
-                                   e = Ptrain[,"OS_STATUS"])
-  PainData_valid = importDnnetSurv(x = Pvalid[,c(1:20,23:27)],
-                                   y = Pvalid[,"OS_MONTHS"],
-                                   e = Pvalid[,"OS_STATUS"])
 }
+
+# Make zero survival times positive for both events and censored observations.
+Ptrain$OS_MONTHS[which(Ptrain$OS_MONTHS == 0)] = 0.1
+Pvalid$OS_MONTHS[which(Pvalid$OS_MONTHS == 0)] = 0.1
+
+# Standardize both partitions using training statistics only.
+for (i in c(20,25)) {
+  train_mean = mean(Ptrain[,i], na.rm = TRUE)
+  train_sd = sd(Ptrain[,i], na.rm = TRUE)
+  if (!is.finite(train_sd) || train_sd <= 0) {
+    stop(paste("Cannot standardize column", i, ": training SD must be positive and finite."))
+  }
+  Ptrain[,i] = (Ptrain[,i] - train_mean) / train_sd
+  Pvalid[,i] = (Pvalid[,i] - train_mean) / train_sd
+}
+
+PainData_train = importDnnetSurv(x = Ptrain[,c(1:10,16:20,23:27)],
+                                 y = Ptrain[,"OS_MONTHS"],
+                                 e = Ptrain[,"OS_STATUS"])
+PainData_valid = importDnnetSurv(x = Pvalid[,c(1:10,16:20,23:27)],
+                                 y = Pvalid[,"OS_MONTHS"],
+                                 e = Pvalid[,"OS_STATUS"])
 
 ########### Load Package and functions ###########
 library(SurvDeepFIT)

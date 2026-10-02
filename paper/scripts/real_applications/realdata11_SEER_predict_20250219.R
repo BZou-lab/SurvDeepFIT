@@ -33,10 +33,25 @@ validN = paste(Fold_Name,Folder_args,"/validdata","_",use_seed,".rds",sep = "")
 
 Ptrain = readRDS(trainN)
 Pvalid = readRDS(validN)
-PainData_train = importDnnetSurv(x = Ptrain[,c(1:20,23:27)],
+# Make zero survival times positive for both events and censored observations.
+Ptrain$OS_MONTHS[which(Ptrain$OS_MONTHS == 0)] = 0.1
+Pvalid$OS_MONTHS[which(Pvalid$OS_MONTHS == 0)] = 0.1
+
+# Standardize both partitions using training statistics only.
+for (i in c(20,25)) {
+  train_mean = mean(Ptrain[,i], na.rm = TRUE)
+  train_sd = sd(Ptrain[,i], na.rm = TRUE)
+  if (!is.finite(train_sd) || train_sd <= 0) {
+    stop(paste("Cannot standardize column", i, ": training SD must be positive and finite."))
+  }
+  Ptrain[,i] = (Ptrain[,i] - train_mean) / train_sd
+  Pvalid[,i] = (Pvalid[,i] - train_mean) / train_sd
+}
+
+PainData_train = importDnnetSurv(x = Ptrain[,c(1:10,16:20,23:27)],
                                  y = Ptrain[,"OS_MONTHS"],
                                  e = Ptrain[,"OS_STATUS"])
-PainData_valid = importDnnetSurv(x = Pvalid[,c(1:20,23:27)],
+PainData_valid = importDnnetSurv(x = Pvalid[,c(1:10,16:20,23:27)],
                                  y = Pvalid[,"OS_MONTHS"],
                                  e = Pvalid[,"OS_STATUS"])
 
