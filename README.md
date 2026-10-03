@@ -6,11 +6,13 @@ SurvDeepFIT is an R package for fitting stable deep survival models and performi
 
 ![Overview of the SurvDeepFIT framework.](paper/SurvDeepFIT_framework.png)
 
+**Overview of the SurvDeepFIT framework.**
+
 ## Reproducibility
 
-Code used to reproduce the paper's results is available in the `paper/` subfolder. The numerical experiments used 1,000 repetitions for each method, and the real applications used 100 repetitions for each method. Each simulation or application script processes one repetition per invocation, with the first command-line argument determining the repetition-specific random seed and output folder. We recommend running multiple repetitions in parallel through job arrays on a high-performance computing cluster. Corresponding feature selection and prediction scripts should use the same repetition ID. 
+Code used to reproduce the paper's results is available in the `paper/` subfolder. The numerical experiments used 1,000 repetitions for each method, and the real applications used 100 repetitions for each method. Each simulation or application script processes one repetition per invocation, with the first command line argument determining the repetition-specific random seed and output folder. We recommend running multiple repetitions in parallel through job arrays on a high performance computing cluster. Corresponding feature selection and prediction scripts should use the same repetition ID. 
 
-The data used in the real applications are not provided in this repository, but it can be accessed by following instructions in the `Data availability` statement in the manuscript.
+The data used in the real applications are not provided in this repository but can be accessed by following the instructions in the paper's `Data availability` statement.
 
 ## Installation
 
