@@ -45,7 +45,7 @@ if (anyNA(cohort$T_Stage) || any(!cohort$T_Stage %in% t_stage_levels)) {
 }
 cohort$T_Stage <- factor(cohort$T_Stage, levels = t_stage_levels)
 
-# Color and label settings for figures 
+# Color and label settings for figures
 income_colors <- c(Low = "#0072B2", High = "#D55E00")
 category_colors <- c("#0072B2", "#D55E00", "#009E73", "#E69F00")
 income_labels <- c(Low = "Low (<$80,000)", High = "High ($80,000+)")
@@ -134,12 +134,14 @@ plots <- list(
     "time_to_trt_days", "Time from diagnosis to treatment (days)")
 )
 
-# Summarize all subjects within each income group
+# Summarize all subjects within each income group. Place the labels above the
+# largest observed treatment time so they do not obscure boxes or outliers.
 treatment_time_summary <- cohort %>%
   group_by(income_group) %>%
   summarise(
     mean_days = mean(time_to_trt_days),
     median_days = median(time_to_trt_days),
+    se_days = sd(time_to_trt_days) / sqrt(n()),
     .groups = "drop"
   ) %>%
   mutate(label = sprintf("Mean: %.1f days\nMedian: %.1f days", mean_days, median_days))
@@ -154,6 +156,27 @@ plots$time_to_treatment <- plots$time_to_treatment +
   expand_limits(y = treatment_label_y) +
   scale_y_continuous(expand = expansion(mult = c(0.05, 0.12)))
 
+# Compare group means using all subjects. Error bars show mean +/- one standard
+# error (sample SD / sqrt(group size)); labels sit above the upper error bars.
+mean_label_gap <- 0.04 * max(treatment_time_summary$mean_days +
+                               treatment_time_summary$se_days)
+plots$mean_time_to_treatment <- ggplot(
+  treatment_time_summary, aes(income_group, mean_days, fill = income_group)
+) +
+  geom_col(width = 0.6) +
+  geom_errorbar(aes(ymin = mean_days - se_days, ymax = mean_days + se_days),
+                width = 0.15, linewidth = 0.5) +
+  geom_text(aes(y = mean_days + se_days + mean_label_gap,
+                label = sprintf("%.1f days", mean_days)),
+            vjust = 0, size = 3.8, fontface = "bold") +
+  scale_fill_manual(values = income_colors, guide = "none") +
+  scale_x_discrete(labels = income_axis_labels) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.15))) +
+  labs(x = "Income", y = "Mean time from diagnosis to treatment (days)") +
+  income_theme +
+  theme(axis.title.y = element_text(size = 11),
+        axis.text.y = element_text(size = 11))
+
 figure_dir <- file.path(root, "figures", "seer_income_analysis")
 dir.create(figure_dir, showWarnings = FALSE, recursive = TRUE)
 for (name in names(plots)) {
@@ -165,9 +188,10 @@ for (name in names(plots)) {
   ggsave(paste0(stem, ".png"), plot = plots[[name]], width = width, height = 4.5,
          units = "in", dpi = 600, bg = "white")
 }
-message("Saved six income subgroup figures (PDF and PNG) in ", figure_dir,
+message("Saved seven income subgroup figures (PDF and PNG) in ", figure_dir,
         "; all ", nrow(cohort), " subjects: Low n = ", group_counts[["Low"]],
         ", High n = ", group_counts[["High"]], ".")
+
 
 
 # Adjusted Cox model analysis ---------------------------------------------------
@@ -178,9 +202,9 @@ cohort$M_Stage <- as.factor(cohort$M_Stage)
 cohort$AFP_status <- as.factor(cohort$AFP_status)
 
 # Fit a multivariable Cox proportional hazards model
-Cox_fit <- coxph(Surv(OS_MONTHS, OS_STATUS) ~ 
-                   income_group + Age + Race + Sex + 
-                   T_Stage + N_Stage + M_Stage + tumor_size + Grade + AFP_status, 
+Cox_fit <- coxph(Surv(OS_MONTHS, OS_STATUS) ~
+                   income_group + Age + Race + Sex +
+                   T_Stage + N_Stage + M_Stage + tumor_size + Grade + AFP_status,
                  data = cohort)
 
 # Model summary
@@ -203,7 +227,7 @@ ph_test <- cox.zph(Cox_fit)
 # View results
 print(ph_test)
 
-# Fit a stratified Cox model, where strata are created for variables violating the PH assumption 
+# Fit a stratified Cox model, where strata are created for variables violating the PH assumption
 Cox_stratified <- coxph(
   Surv(OS_MONTHS, OS_STATUS) ~
     income_group + Age + Race + Sex +
@@ -251,7 +275,7 @@ make_ph_results <- function(test) {
 cox_ph_results <- make_ph_results(ph_test)
 cox_stratified_ph_results <- make_ph_results(ph_test_stratified)
 
-# Save results as tables in LaTeX format 
+# Save results as tables in LaTeX format
 format_cox_p <- function(p) {
   ifelse(is.na(p), "NA", ifelse(p < 0.001, "<0.001", sprintf("%.3f", p)))
 }
@@ -283,7 +307,7 @@ save_cox_table <- function(display_table, stem, caption, note) {
     "\\end{minipage}", "\\end{table}"
   ), file.path(table_dir, paste0(stem, ".tex")))
 }
-# Translate model terms only for display 
+# Translate model terms only for display
 cox_variable_labels <- c(
   income_group = "Income Group", Age = "Age", Race = "Race", Sex = "Sex",
   T_Stage = "T Stage", N_Stage = "N Stage", M_Stage = "M Stage",
