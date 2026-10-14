@@ -10,7 +10,13 @@ SurvDeepFIT is an R package for fitting stable deep survival models and performi
 
 ## Reproducibility
 
-Code used to reproduce the paper's results is available in the `paper/` subfolder. The numerical experiments used 1,000 repetitions for each method, and the real applications used 100 repetitions for each method. Each simulation or application script processes one repetition per invocation, with the first command line argument determining the repetition-specific random seed and output folder. We recommend running multiple repetitions in parallel through job arrays on a high performance computing cluster. Corresponding feature selection and prediction scripts should use the same repetition ID. 
+Code used to reproduce the paper's results is available in the `paper/` subfolder. 
+
+`paper/scripts/numerical_experiments` contains the code used to run the numerical experiments; file name extensions denote the simulation scenario and training sample sizes.
+
+`paper/scripts/real_applications` contains the code used to preprocess SEER and METABRIC data, run feature selection and survival prediction, and generate figures and tables displaying the results.
+
+The numerical experiments used 1,000 repetitions for each method, and the real applications used 100 repetitions for each method. Each simulation or application script processes one repetition per invocation, with the first command line argument determining the repetition-specific random seed and output folder. We recommend running multiple repetitions in parallel through job arrays on a high performance computing cluster. Corresponding feature selection and prediction scripts should use the same repetition ID. 
 
 The data used in the real applications are not provided in this repository but can be accessed by following the instructions in the paper's `Data availability` statement.
 
