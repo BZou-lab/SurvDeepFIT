@@ -1,0 +1,32 @@
+% Requires \usepackage{booktabs} in the document preamble.
+\begin{table}[!htbp]
+\centering
+\small
+\caption{SEER-HCC feature selection frequencies across 100 repetitions}
+\label{tab:seer_heatmap_data}
+\begin{tabular}{lrrrrr}
+\toprule
+Feature & SurvDeepFIT & Cox & AFT & RSF & XGBoost \\
+\midrule
+T stage & 100 & 100 & 100 & 100 & 100 \\
+N stage & 100 & 100 & 100 & 91 & 99 \\
+M stage & 100 & 100 & 100 & 100 & 100 \\
+Fibrosis Score & 100 & 100 & 100 & 100 & 100 \\
+AFP Positive & 100 & 100 & 100 & 100 & 100 \\
+Single Localized Tumor & 100 & 99 & 100 & 100 & 100 \\
+Tumor Size & 100 & 100 & 100 & 100 & 100 \\
+Age at Diagnosis & 100 & 100 & 100 & 100 & 100 \\
+Income & 99 & 100 & 100 & 25 & 85 \\
+Tumor Grade & 81 & 28 & 83 & 9 & 1 \\
+Marital Status & 61 & 94 & 98 & 43 & 1 \\
+Race & 30 & 30 & 87 & 4 & 8 \\
+First Primary Tumor & 22 & 68 & 83 & 2 & 0 \\
+Number of Tumors & 19 & 18 & 38 & 86 & 0 \\
+Sex & 10 & 17 & 24 & 17 & 0 \\
+\bottomrule
+\end{tabular}
+\begin{minipage}{0.95\linewidth}
+\vspace{0.5em}
+\footnotesize Values are the number of repetitions (out of 100) in which a feature was selected. For categorical features, selection of at least one indicator counts as one selection per repetition.
+\end{minipage}
+\end{table}

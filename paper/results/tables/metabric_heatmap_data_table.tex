@@ -1,0 +1,37 @@
+% Requires \usepackage{booktabs} in the document preamble.
+\begin{table}[!htbp]
+\centering
+\small
+\caption{METABRIC feature selection frequencies across 100 repetitions}
+\label{tab:metabric_heatmap_data}
+\begin{tabular}{lrrrrr}
+\toprule
+Feature & SurvDeepFIT & Cox & AFT & RSF & XGBoost \\
+\midrule
+Age at Diagnosis & 100 & 100 & 100 & 100 & 100 \\
+NPI & 100 & 97 & 98 & 99 & 100 \\
+Positive Lymph Nodes & 100 & 100 & 100 & 100 & 100 \\
+Tumor Size & 100 & 100 & 100 & 63 & 100 \\
+TP53 & 95 & 81 & 86 & 31 & 99 \\
+HER2 Status & 94 & 67 & 61 & 4 & 91 \\
+PR Status & 79 & 0 & 0 & 0 & 4 \\
+GATA3 & 63 & 86 & 81 & 15 & 91 \\
+NOTCH1 & 57 & 28 & 30 & 0 & 4 \\
+ER Status & 37 & 11 & 9 & 4 & 23 \\
+EP300 & 36 & 54 & 49 & 0 & 3 \\
+HER2 SNP6 & 35 & 0 & 0 & 0 & 35 \\
+LAMA2 & 29 & 69 & 69 & 4 & 1 \\
+PIK3CA & 26 & 73 & 78 & 5 & 11 \\
+Clinical ER Status & 24 & 0 & 0 & 13 & 10 \\
+ARID1A & 22 & 12 & 14 & 2 & 0 \\
+DNAH5 & 22 & 75 & 69 & 2 & 2 \\
+STAB2 & 22 & 25 & 25 & 2 & 39 \\
+THADA & 19 & 27 & 29 & 12 & 4 \\
+COL12A1 & 15 & 2 & 1 & 15 & 0 \\
+\bottomrule
+\end{tabular}
+\begin{minipage}{0.95\linewidth}
+\vspace{0.5em}
+\footnotesize Values are the number of repetitions (out of 100) in which a feature was selected. For categorical features, selection of at least one indicator counts as one selection per repetition.
+\end{minipage}
+\end{table}
