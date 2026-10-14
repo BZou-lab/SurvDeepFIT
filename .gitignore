@@ -3,15 +3,9 @@
 .RData
 .Ruserdata
 
-# Paper data and generated outputs
+# Paper data
 paper/data/*
 !paper/data/.gitkeep
-
-paper/results/figures/*
-!paper/results/figures/.gitkeep
-
-paper/results/tables/*
-!paper/results/tables/.gitkeep
 
 # Raw/intermediate analysis files
 paper/**/*.rds
