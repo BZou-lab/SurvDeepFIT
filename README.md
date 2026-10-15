@@ -2,7 +2,7 @@
 
 ## Overview
 
-SurvDeepFIT is an R package for fitting stable deep survival models and performing statistically grounded feature-level inference. It accompanies the paper *Interpretable deep survival learning for prognostic discovery from heterogeneous health data*.
+SurvDeepFIT is an R package for fitting stable deep survival models and performing statistically grounded feature-level inference. It accompanies the paper *Interpretable deep survival learning for prognostic discovery across heterogeneous health data*.
 
 ![Overview of the SurvDeepFIT framework.](paper/SurvDeepFIT_framework.png)
 
