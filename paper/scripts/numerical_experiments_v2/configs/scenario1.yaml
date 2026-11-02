@@ -1,0 +1,45 @@
+scenario: 1
+training_sizes: [1000, 3000]
+test_fraction: 0.2
+correlations: [0, 0.3, 0.5]
+repetitions: 1000
+base_seed: 20261102
+block_size: 10
+methods: [SurvDeepFIT, Cox, AFT, RSF, XGBoost]
+baseline:
+  gamma: 3
+  lambda: 0.00002
+censoring:
+  shape: 1.5
+  scale: 3.5
+selection:
+  alpha: 0.05
+  xgboost_top: 10
+  rsf_table: var.sel
+  survdeepfit_pvalue: importance_pval_x
+models:
+  survdeepfit:
+    folds: 5
+    permutations: 100
+    ensemble_size: 100
+    hidden_nodes: [50, 40, 30, 20]
+    activation: relu
+    l1_penalty: 0.0001
+    epochs: 1000
+    batch_size: 50
+    early_stop: 1000
+  aft:
+    distribution: weibull
+  rsf:
+    ntree: 500
+    subsamples: 100
+  xgboost:
+    nrounds: 50
+    max_depth: 3
+    eta: 0.10
+evaluation:
+  feature_sets: [full, selected]
+  ibs_event_quantiles: [0.1, 0.9]
+  ibs_points: 100
+  ibs_grid_source: training
+  censoring_estimate: test_km

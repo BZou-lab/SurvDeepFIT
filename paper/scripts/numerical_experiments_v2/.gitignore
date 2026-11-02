@@ -1,0 +1,5 @@
+/results/*
+!/results/.gitkeep
+/slurm/logs/
+*.out
+*.err
