@@ -1,0 +1,4 @@
+*.R text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
+*.slurm text eol=lf

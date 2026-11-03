@@ -35,7 +35,8 @@ for (scenario in 1:2) for (rho in config$correlations) {
     x <- rbind(data$train, data$test)
     x$Z1 + 2 * x$X1 * x$Z2 + 0.5 * x$X3^2 + x$X5 * x$X7
   }
-  stopifnot(isTRUE(all.equal(data$log_risk, reconstructed / sqrt(120 / 1000))))
+  # Current pilot design halves the original coefficients and omits n-dependent scaling.
+  stopifnot(isTRUE(all.equal(data$log_risk, reconstructed / 2)))
 }
 
 config$scenario <- 1
@@ -54,14 +55,28 @@ xgb <- evaluate_features("XGBoost", data$feature_names, data$important_features,
 stopifnot(is.na(xgb$metrics$average_power), is.na(xgb$metrics$type1_error),
           xgb$metrics$n_selected == 10)
 
+# Isolate adapter checks from Weibull AFT misspecification under Gompertz times.
+# Fixed quantile permutations give a small, deterministic Weibull fixture.
+model_data <- data
+fixture <- rbind(data$train, data$test)
+index <- seq_len(nrow(fixture))
+event <- stats::qweibull(((37 * index) %% nrow(fixture) + 0.5) / nrow(fixture),
+                         shape = 2, scale = exp(0.2 * fixture$X1 - 0.1 * fixture$X3))
+censor <- stats::qweibull(((53 * index) %% nrow(fixture) + 0.5) / nrow(fixture),
+                          shape = 1.5, scale = 2.5)
+fixture$time <- pmin(event, censor)
+fixture$status <- as.integer(event <= censor)
+model_data$train <- fixture[seq_len(nrow(data$train)), , drop = FALSE]
+model_data$test <- fixture[nrow(data$train) + seq_len(nrow(data$test)), , drop = FALSE]
+
 # Two cheap native fits verify extraction, risk direction, and probability dimensions.
 for (method in c("Cox", "AFT")) {
-  stage <- capture_stage(fit_feature_selection(method, data, config, seed, stage_rng(seed, 1), "unused"))
+  stage <- capture_stage(fit_feature_selection(method, model_data, config, seed, stage_rng(seed, 1), "unused"))
   if (!stage$ok) stop(method, " smoke fit failed: ", stage$error, " ", paste(stage$warnings, collapse = "; "))
   stopifnot(identical(stage$value$features$feature, data$feature_names),
             !any(c("(Intercept)", "Log(scale)") %in% stage$value$features$feature))
-  prediction <- evaluate_prediction(method, stage$value$model, data$train, data$test,
-                                    data$feature_names, evaluation_times(data$train, config))
+  prediction <- evaluate_prediction(method, stage$value$model, model_data$train, model_data$test,
+                                    data$feature_names, evaluation_times(model_data$train, config))
   stopifnot(is.finite(prediction$cindex), is.finite(prediction$ibs),
             prediction$cindex >= 0, prediction$cindex <= 1,
             prediction$ibs >= 0, prediction$ibs <= 1)

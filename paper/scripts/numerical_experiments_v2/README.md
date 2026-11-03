@@ -1,7 +1,9 @@
 # Numerical experiments, version 2
 
-This framework implements the two manuscript scenarios for SurvDeepFIT, Cox,
-Weibull AFT, RSF, and XGBoost. The original numerical scripts and the package's
+This framework implements the two scenario structures for SurvDeepFIT, Cox,
+Weibull AFT, RSF, and XGBoost. The current pilot uses half the manuscript effect
+coefficients and no sample-size scaling, as manually revised in the generator.
+The original numerical scripts and the package's
 `R/source_permfit_survival_20230610.r` are unchanged. No full simulations or SLURM
 jobs have been run as part of this refactor.
 
@@ -15,6 +17,7 @@ R/evaluate_features.R        Power, type I error, and ranking
 R/evaluate_prediction.R      Held-out C-index, survival probabilities, and IPCW IBS
 R/workflow.R                 Configuration, RNG streams, checkpoints, failure capture
 run_simulation.R            One repetition or a local sequence of repetitions
+check_environment.R         Dependency loading and interface checks without fitting
 summarize_results.R         Coverage, recovery, prediction, and failure tables
 validate.R                  Small deterministic checks and inexpensive Cox/AFT fits
 slurm/run_simulation.slurm   Job-array wrapper
@@ -34,8 +37,10 @@ to this repository. Record/freeze that build before production.
 The supplied YAML files differ only in `scenario`. They specify 1,000 repetitions,
 training sizes 1,000/3,000, correlations 0/0.3/0.5, and block size 10 (50 predictors).
 `test_fraction: 0.2` means **test size / training size**: 200/600 independent test
-subjects, not a 20% split of total observations. Effects are scaled by
-`1 / sqrt(n_train / 1000)`. The five/six important original features are recorded
+subjects, not a 20% split of total observations. The current effects are halved
+and the former `1 / sqrt(n_train / 1000)` scaling is disabled, so both training
+sizes use the same coefficients. This intentionally differs from the manuscript.
+The five/six important original features are recorded
 in every dataset; generated interaction terms are not supplied as model inputs.
 
 Copy a YAML file to configure a different study. `--n` and `--rho` select settings
@@ -74,6 +79,82 @@ Prepare the desired R environment using Longleaf's current module/environment
 instructions. No module name, account, partition, GPU, or environment path is
 hardcoded. Submit from this directory, or set `SIMULATION_ROOT` to its absolute
 path. Use an absolute output path on appropriate persistent/scratch storage.
+
+### Single repetition pilot
+
+Edit locally, review your diff, and commit/push the intended changes to GitHub on
+`simulation-refactor`. Uncommitted local edits cannot be pulled on Longleaf. In
+the Longleaf clone, first check for local changes, then update the same branch:
+
+```sh
+git status
+git fetch origin
+git switch simulation-refactor
+git pull --ff-only origin simulation-refactor
+git rev-parse HEAD
+cd paper/scripts/numerical_experiments_v2
+```
+
+If `git status` shows local edits on Longleaf, resolve them before pulling; do not
+discard them automatically. Git transfers code, not your R environment. Load the
+R module/environment that matches your installed packages and confirm `Rscript
+--version`. Find available modules using `module spider r` if needed. The wrapper
+uses that environment, or the explicit executable in `RSCRIPT`; it does not select
+or install an R version. Repository attributes keep R/YAML/SLURM text files in LF
+format when Git checks them out on Linux.
+
+Check configuration and dependencies without simulation or model fitting:
+
+```sh
+Rscript run_simulation.R --config configs/scenario1.yaml --rep 1 --n 1000 --rho 0 --validate-only
+Rscript check_environment.R --config configs/scenario1.yaml
+```
+
+The dependency check prints package versions, load failures, and library paths.
+It also loads the legacy inference definitions when SurvDeepFIT is requested, but
+does not execute them. To check only native Cox/AFT requirements, add
+`--methods Cox,AFT`. The SLURM wrapper repeats the dependency check on its compute
+node and stops before fitting if it fails.
+
+Submit one repetition at one setting, using a new results directory for this
+halved-effect design. Replace the example output path below before running:
+
+```sh
+export SIM_RESULTS="/path/to/persistent/survdeepfit-v2-pilot"
+mkdir -p slurm/logs
+sbatch --array=1 --cpus-per-task=1 --mem=8G --time=12:00:00 \
+  --output=slurm/logs/pilot-%A_%a.out --error=slurm/logs/pilot-%A_%a.err \
+  slurm/run_simulation.slurm "$PWD/configs/scenario1.yaml" "$SIM_RESULTS" \
+  --n 1000 --rho 0
+```
+
+This runs repetition 1 of Scenario 1, with 1,000 training/200 test subjects,
+correlation zero, and all five methods at their configured settings. Append
+`--methods Cox,AFT` for a cheaper first execution check. Use `scenario2.yaml` for
+the nonlinear pilot. Without `--n` and `--rho`, even a one-task array runs all
+six settings. The pilot does not estimate power or type I error reliably.
+
+Monitor the job ID returned by `sbatch` and inspect resource use after completion:
+
+```sh
+squeue -u "$USER"
+sacct -j JOB_ID --format=JobID,State,Elapsed,MaxRSS,ExitCode
+tail -n 80 slurm/logs/pilot-JOB_ID_1.out
+tail -n 80 slurm/logs/pilot-JOB_ID_1.err
+Rscript summarize_results.R --input "$SIM_RESULTS" --output "$SIM_RESULTS/summary"
+```
+
+Replace `JOB_ID` with the numeric job ID. Check `summary/status.csv` for selection
+failures/warnings, `summary/prediction_results.csv` for prediction/IBS failures,
+and `summary/coverage.csv` for missing methods/repetitions. A SLURM exit code of
+zero does not guarantee every method succeeded: fitting failures are recorded so
+other methods can finish. A pilot will intentionally show missing repetitions
+against the configured 1,000-repetition study. Rerunning the identical submission
+retries failed stages and reuses successful ones. Keep its source, settings,
+environment, and thread count unchanged while it runs; use a new output directory
+after code changes. Size later resource requests from the pilot's measurements.
+
+### Full study after pilot review
 
 ```sh
 mkdir -p slurm/logs
@@ -156,9 +237,13 @@ without manual recalculation.
 
 ## Equivalence, corrections, and decisions before production
 
-The distribution, feature effects, effect scaling, architecture, alpha=0.05, and
-requested model settings follow the manuscript. This is distributional equivalence,
-not reproduction of historical random numbers or previously published results.
+The feature distributions, scenario term structure, architecture, alpha=0.05,
+and requested model settings follow the manuscript. The current manually edited
+generator halves all effect coefficients and removes sample-size scaling. Thus
+its event-time distribution intentionally differs from the original manuscript
+design. Validation now checks these revised coefficients independently against
+half the original formulas, without the old scaling. Historical random numbers
+and published results are not reproduced.
 
 Confirmed implementation problems addressed locally in v2:
 
@@ -232,10 +317,18 @@ aggregation. It does not statistically validate the legacy p-values, estimate po
 or run ensembles/forests/boosting. Validate those package-specific adapters in the
 intended Longleaf environment before running the full study.
 
+The native Cox/AFT adapter checks use a separate deterministic Weibull fixture.
+The revised halved/unscaled Gompertz smoke dataset produced an AFT convergence
+warning locally on 2026-11-03, and the failure guard correctly rejected it.
+The model and convergence policy were not changed to accommodate that failure.
+The scenario-generator checks still verify the actual revised Gompertz mechanisms.
+
 Local verification on 2026-11-02 passed under R 4.4.0: the validation script,
 configuration-only CLI, and an end-to-end 120-training/24-test-subject Cox/AFT run
 followed by CLI aggregation. The working local environment could not load
 SurvDeepFIT's dependencies, RSF, or XGBoost; those adapters were not trained.
-The Windows sandbox also prevented Bash from starting for a syntax-only check,
-so the SLURM wrapper still needs checking with Bash on Longleaf. No packages were
-installed and no jobs were submitted.
+On 2026-11-03, the updated validation suite and native-only dependency check passed,
+and Bash's syntax-only check passed for the SLURM wrapper. The all-method dependency
+check correctly rejected incompatible local compiled dependencies before fitting.
+Execution on Longleaf remains to be tested. No packages were installed and no jobs
+were submitted.

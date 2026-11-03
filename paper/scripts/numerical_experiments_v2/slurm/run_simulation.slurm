@@ -18,6 +18,9 @@ export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 export OPENBLAS_NUM_THREADS="$OMP_NUM_THREADS"
 export MKL_NUM_THREADS="$OMP_NUM_THREADS"
 
+# Fail the job early if packages cannot load; no fitting occurs in this check.
+"${RSCRIPT:-Rscript}" "$simulation_root/check_environment.R" --config "$config" "$@"
+
 "${RSCRIPT:-Rscript}" "$simulation_root/run_simulation.R" \
   --config "$config" --output "$output" \
   --rep "${SLURM_ARRAY_TASK_ID:?Submit this script as a job array}" \
