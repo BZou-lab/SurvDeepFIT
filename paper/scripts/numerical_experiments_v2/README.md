@@ -113,6 +113,8 @@ Rscript check_environment.R --config configs/scenario1.yaml
 The dependency check prints package versions, load failures, and library paths.
 For SurvDeepFIT, it also runs hand-built `dnnet`/`dnnetEnsemble` prediction fixtures
 through the real deepTL methods, legacy prediction helper, and v2 prediction adapter.
+It additionally exercises the real legacy AUC/IPCW survival-formula evaluation path
+on a fixed censored fixture, checking AUC and all three inference score differences.
 It performs no model training or simulated-data generation. To check only native Cox/AFT requirements, add
 `--methods Cox,AFT`. The SLURM wrapper repeats the dependency check on its compute
 node and stops before fitting if it fails.
@@ -154,6 +156,80 @@ against the configured 1,000-repetition study. Rerunning the identical submissio
 retries failed stages and reuses successful ones. Keep its source, settings,
 environment, and thread count unchanged while it runs; use a new output directory
 after code changes. Size later resource requests from the pilot's measurements.
+
+### Correction after pilot job 8066047
+
+The reported second pilot passed Cox, AFT, RSF, and XGBoost, but SurvDeepFIT selection
+failed with `could not find function "Surv"`. The earlier S4 prediction fix is
+preserved. A reduced local training run reproduced this error. An error calling
+handler captured the live stack before `capture_stage()` could unwind it:
+
+```text
+permfit_survival -> log_lik_diff -> timedAUC -> timeROC
+  -> pec::ipcw -> ipcw.marginal -> prodlim::prodlim
+  -> EventHistory.frame -> model.frame.default -> eval
+Failing call: Surv(failure_time, status)
+```
+
+In timeROC 0.4.1, `timeROC()` constructs `Surv(failure_time, status) ~ 1`
+inside its own execution frame. Formula evaluation follows that frame's lexical
+environment, the timeROC namespace, which cannot resolve `Surv` in the local build.
+It does not follow the caller's legacy environment, so the existing `core$Surv`
+binding cannot fix this path. The dependency's formula callback fails even though
+network training, S4 prediction dispatch, and legacy C-index evaluation work.
+
+The v2 adapter now binds a local copy of `timeROC()` whose environment is a private
+child of the original function environment, containing `survival::Surv`. Its body
+and formals are unchanged; existing package helpers remain accessible through the
+original environment. The installed namespace and global search path are untouched.
+No global package attachment is required. This repairs name lookup without changing
+AUC/IPCW calculations, inference mathematics, model settings, data generation, or RNG
+behavior. AFT and the other successful methods are unchanged.
+
+Both `check_environment.R` and `validate.R` now execute the actual failing
+`timedAUC`/IPCW/formula path on 24 fixed subjects with censoring, checking perfect
+and reversed rankings (AUC 1 and 0), and all three `log_lik_diff` components.
+Validation also checks that the package function environment/body/formals, global
+search path, and RNG state remain unchanged by this repair and fixture.
+
+Local verification on 2026-11-03 passed under R 4.6.1, survival 3.8.6,
+deepTL 1.0.0, timeROC 0.4.1, Hmisc 5.3.0, and magrittr 2.0.5:
+`validate.R`, the SurvDeepFIT-only preflight, and a real end-to-end SurvDeepFIT run
+followed by CLI aggregation. The smoke run used 120 training/24 test subjects,
+block size 2 (10 predictors), rho 0, 2 folds, 4 permutations, 3 networks per
+ensemble, one hidden layer of 4 nodes, 10 epochs, batch size 10, and early-stop
+setting 10. IBS used 20 points over training event quantiles 0.1 to 0.6.
+Selection and both prediction/IBS stages were `ok`, with no stage warnings;
+full/selected C-index was 0.8077/0.5000 and IBS was 0.12135/0.12174.
+These are execution checks, not statistical validation of inference or power.
+Local Windows startup emitted locale warnings before script execution.
+Longleaf R 4.5.0/survival 3.8.3 verification remains necessary. No packages were
+installed and no cluster jobs or full study were launched here.
+
+After pushing the reviewed local changes and pulling them on Longleaf, run the
+following from the outer workspace root. Keep the old pilot directories intact:
+
+```sh
+source scripts/seer_r_environment.sh
+cd SurvDeepFIT_repo/paper/scripts/numerical_experiments_v2
+Rscript --vanilla check_environment.R --config configs/scenario1.yaml --methods SurvDeepFIT
+Rscript --vanilla validate.R
+mkdir -p results slurm/logs
+PILOT_OUTPUT="$(mktemp -d "$PWD/results/pilot-surv-scope-XXXXXXXX")"
+echo "$PILOT_OUTPUT"
+sbatch --array=1 --cpus-per-task=1 --mem=8G --time=12:00:00 \
+  --output=slurm/logs/pilot-surv-scope-%A_%a.out \
+  --error=slurm/logs/pilot-surv-scope-%A_%a.err \
+  slurm/run_simulation.slurm "$PWD/configs/scenario1.yaml" \
+  "$PILOT_OUTPUT" --n 1000 --rho 0 --methods SurvDeepFIT
+```
+
+The array index supplies repetition 1; the unchanged config supplies seed 20261102
+and 200 test subjects. Only SurvDeepFIT runs, at the configured pilot settings.
+Use a new directory because changed code invalidates old checkpoint signatures.
+After completion, summarize with `Rscript --vanilla summarize_results.R --input
+"$PILOT_OUTPUT" --output "$PILOT_OUTPUT/summary"` and inspect selection, prediction,
+and IBS status; a zero SLURM exit code alone does not establish success.
 
 ### Corrections after pilot job 8039199
 

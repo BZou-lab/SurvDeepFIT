@@ -56,6 +56,8 @@ main <- function(arguments) {
     if (!methods::isClass("PermFIT")) stop("The loaded deepTL build does not register the PermFIT class.")
     check_survdeepfit_dispatch(core)
     cat("PASS: dnnet and dnnetEnsemble prediction through legacy and v2 paths (no training).\n")
+    check_survdeepfit_inference_metrics(core)
+    cat("PASS: legacy inference metrics including timeROC/IPCW survival-formula evaluation (no training).\n")
   }
   if ("RSF" %in% selected && !"ntree" %in% names(formals(randomForestSRC::rfsrc))) {
     stop("Unexpected randomForestSRC interface: rfsrc has no ntree argument.")

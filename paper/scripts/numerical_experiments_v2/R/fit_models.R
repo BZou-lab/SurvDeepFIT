@@ -23,6 +23,17 @@ predict_deep_model <- function(model, newdata) {
   generic(model, as.matrix(newdata))
 }
 
+scoped_timeROC <- function() {
+  # timeROC 0.4.1 creates an unqualified Surv() formula inside its own frame.
+  # Formula lookup follows that function's lexical scope, not the legacy caller.
+  # Keep package helpers visible while supplying Surv in a private child scope.
+  fun <- timeROC::timeROC
+  scope <- new.env(parent = environment(fun))
+  scope$Surv <- survival::Surv
+  environment(fun) <- scope
+  fun
+}
+
 load_legacy_inference <- function(core_file) {
   for (package in c("deepTL", "magrittr", "survival", "Hmisc", "timeROC")) {
     require_package(package)
@@ -34,7 +45,7 @@ load_legacy_inference <- function(core_file) {
   }
   core$Surv <- survival::Surv
   core$rcorr.cens <- Hmisc::rcorr.cens
-  core$timeROC <- timeROC::timeROC
+  core$timeROC <- scoped_timeROC()
   sys.source(core_file, envir = core)
   # Namespace loading alone leaves unqualified predict() resolving to the S3 generic.
   core$predict <- deep_prediction_generic()
@@ -70,6 +81,22 @@ check_survdeepfit_dispatch <- function(core) {
   }
   risk <- predict_risk("SurvDeepFIT", ensemble, data.frame(x), colnames(x))
   if (!isTRUE(all.equal(risk, expected + 0.5))) stop("V2 ensemble risk prediction failed.")
+  invisible(TRUE)
+}
+
+check_survdeepfit_inference_metrics <- function(core) {
+  # Exercise timeROC -> pec::ipcw -> prodlim -> formula evaluation, without training.
+  time <- seq_len(24)
+  status <- rep(c(1, 0, 1), 8)
+  risk <- -time
+  auc <- core$timedAUC(status, time, risk)
+  reverse_auc <- core$timedAUC(status, time, -risk)
+  input <- deepTL::importDnnetSurv(x = cbind(X1 = time, X2 = -time), y = time, e = status)
+  difference <- core$log_lik_diff("survival", risk, -risk, input,
+                                 y_hatcoxl = risk, y_hat0coxl = -risk)
+  stopifnot(isTRUE(all.equal(auc, 1)), isTRUE(all.equal(reverse_auc, 0)),
+            length(difference) == 3, all(is.finite(difference)),
+            isTRUE(all.equal(unname(difference[c(1, 3)]), c(1, 1))))
   invisible(TRUE)
 }
 

@@ -107,6 +107,19 @@ if (requireNamespace("deepTL", quietly = TRUE) && requireNamespace("Hmisc", quie
   core <- load_legacy_inference(file.path(root, "../../../R/source_permfit_survival_20230610.r"))
   check_survdeepfit_dispatch(core)
   cat("PASS: real dnnet/dnnetEnsemble prediction fixtures without training.\n")
+  # Check formula scope, numerical results, and absence of global/RNG mutations.
+  search_before <- search()
+  original_timeROC_environment <- environment(timeROC::timeROC)
+  with_rng(seed, {
+    rng_before <- .Random.seed
+    check_survdeepfit_inference_metrics(core)
+    stopifnot(identical(rng_before, .Random.seed))
+  })
+  stopifnot(identical(search_before, search()),
+            identical(original_timeROC_environment, environment(timeROC::timeROC)),
+            identical(body(core$timeROC), body(timeROC::timeROC)),
+            identical(formals(core$timeROC), formals(timeROC::timeROC)))
+  cat("PASS: real legacy timeROC/IPCW/formula path; package scope, search path, and RNG preserved.\n")
 } else {
   cat("SKIP: deepTL prediction fixtures need loadable deepTL, Hmisc, timeROC, and magrittr.\n")
 }
