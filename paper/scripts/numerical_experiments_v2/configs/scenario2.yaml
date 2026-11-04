@@ -31,6 +31,7 @@ models:
   aft:
     distribution: weibull
   rsf:
+    importance: permute
     ntree: 500
     subsamples: 100
   xgboost:

@@ -36,8 +36,8 @@ for (scenario in 1:2) for (rho in config$correlations) {
     x <- rbind(data$train, data$test)
     x$Z1 + 2 * x$X1 * x$Z2 + 0.5 * x$X3^2 + x$X5 * x$X7
   }
-  # Current pilot design halves the original coefficients and omits n-dependent scaling.
-  stopifnot(isTRUE(all.equal(data$log_risk, reconstructed / 2)))
+  # Current design uses the original coefficients and omits n-dependent scaling.
+  stopifnot(isTRUE(all.equal(data$log_risk, reconstructed)))
 }
 
 config$scenario <- 1

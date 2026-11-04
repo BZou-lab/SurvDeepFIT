@@ -1,0 +1,12 @@
+# Used with run_rsf_diagnostic.R only. The study configuration/generator are unchanged.
+study_config: scenario1.yaml
+repetitions: 10
+n_train: 1000
+rho: 0
+threads: 1
+designs: [signal, global_null]
+# Forest count and subsample count are inherited: ntree=500, B=100.
+# The original base seed/grid and RSF stage streams are reused.
+# Selection rules are fixed before observing diagnostic results.
+alpha: 0.05
+alternative_table: var.jk.sel.Z

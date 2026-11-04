@@ -16,17 +16,16 @@ generate_data <- function(config, n_train, rho, rng_state) {
 
     important <- c("X1", paste0("X", c(1, 2, 3) * block_size + 1), "Z1")
     if (config$scenario == 1) {
-      log_risk <- as.numeric(as.matrix(features[, important]) %*% c(0.1, 0.2, 0.3, 0.4, 0.5))
+      log_risk <- as.numeric(as.matrix(features[, important]) %*% c(0.2, 0.4, 0.6, 0.8, 1.0))
     } else {
       important <- c(important, "Z2")
-      log_risk <- 0.5 * features$Z1 + features$X1 * features$Z2 +
-        0.25 * features[[paste0("X", block_size + 1)]]^2 + 0.5 *
+      log_risk <- features$Z1 + 2 * features$X1 * features$Z2 +
+        0.5 * features[[paste0("X", block_size + 1)]]^2 +
         features[[paste0("X", 2 * block_size + 1)]] *
         features[[paste0("X", 3 * block_size + 1)]]
     }
 
-    # Remove the scaling factor
-    # log_risk <- log_risk / sqrt(n_train / 1000)
+    # Effect coefficients are fixed across training sample sizes (no n-dependent scaling).
 
     # Exact inversion of the manuscript's Gompertz cumulative hazard.
     # This avoids simsurv's internal set.seed(), without changing the distribution.

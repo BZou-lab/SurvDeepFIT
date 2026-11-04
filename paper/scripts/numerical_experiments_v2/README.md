@@ -1,8 +1,16 @@
 # Numerical experiments, version 2
 
+The approved, isolated RSF audit/diagnostic is documented in
+[`RSF_AUDIT.md`](RSF_AUDIT.md). Run `run_rsf_diagnostic.R` with
+`configs/rsf_diagnostic.yaml` to compare the original anti/nonparametric
+selector with permutation/nonparametric and permutation/jackknife selectors
+on paired datasets. Both study configurations now use permutation importance
+and nonparametric subsampling p-values (`var.sel`, p < 0.05). The diagnostic
+explicitly preserves the original anti arm for comparison.
+
 This framework implements the two scenario structures for SurvDeepFIT, Cox,
-Weibull AFT, RSF, and XGBoost. The current pilot uses half the manuscript effect
-coefficients and no sample-size scaling, as manually revised in the generator.
+Weibull AFT, RSF, and XGBoost. The current generator uses the manuscript effect
+coefficients with no sample-size scaling, doubled from the previous pilot design.
 The original numerical scripts and the package's
 `R/source_permfit_survival_20230610.r` are unchanged. A single-repetition Longleaf
 pilot has been reported; the full simulation study has not been launched here.
@@ -37,9 +45,14 @@ to this repository. Record/freeze that build before production.
 The supplied YAML files differ only in `scenario`. They specify 1,000 repetitions,
 training sizes 1,000/3,000, correlations 0/0.3/0.5, and block size 10 (50 predictors).
 `test_fraction: 0.2` means **test size / training size**: 200/600 independent test
-subjects, not a 20% split of total observations. The current effects are halved
-and the former `1 / sqrt(n_train / 1000)` scaling is disabled, so both training
-sizes use the same coefficients. This intentionally differs from the manuscript.
+subjects, not a 20% split of total observations. The current effects are:
+
+- Scenario 1: `0.2*X1 + 0.4*X11 + 0.6*X21 + 0.8*X31 + Z1`.
+- Scenario 2: `Z1 + 2*X1*Z2 + 0.5*X11^2 + X21*X31`.
+
+The former `1 / sqrt(n_train / 1000)` scaling is disabled, so both training
+sizes use the same coefficients. The absence of scaling differs from the manuscript.
+Existing pilot and dated RSF diagnostic outputs used the previous, halved effects.
 The five/six important original features are recorded
 in every dataset; generated interaction terms are not supplied as model inputs.
 
@@ -120,7 +133,7 @@ It performs no model training or simulated-data generation. To check only native
 node and stops before fitting if it fails.
 
 Submit one repetition at one setting, using a new results directory for this
-halved-effect design. Replace the example output path below before running:
+previous halved-effect design. Replace the example output path below before running:
 
 ```sh
 export SIM_RESULTS="/path/to/persistent/survdeepfit-v2-pilot"
@@ -378,10 +391,10 @@ without manual recalculation.
 
 The feature distributions, scenario term structure, architecture, alpha=0.05,
 and requested model settings follow the manuscript. The current manually edited
-generator halves all effect coefficients and removes sample-size scaling. Thus
+generator uses the original effect coefficients and removes sample-size scaling. Thus
 its event-time distribution intentionally differs from the original manuscript
-design. Validation now checks these revised coefficients independently against
-half the original formulas, without the old scaling. Historical random numbers
+design. Validation checks these coefficients independently against
+the original formulas, without the old scaling. Historical random numbers
 and published results are not reproduced.
 
 Confirmed implementation problems addressed locally in v2:
@@ -422,7 +435,9 @@ The following need scientific review before a full simulation launch:
 2. **RSF inference table:** `var.sel` matches the companion native-method application
    code. Supplementary Note 2 does not identify the exact subsampling table; confirm
    the historical table and package version. `subsamples=100` makes the current
-   default explicit. Other RSF tuning settings remain package defaults.
+   default explicit. Both scenarios explicitly request `importance: permute`,
+   using `block.size=1` and nonparametric `var.sel` p-values < 0.05.
+   Other RSF tuning settings remain package defaults.
 3. **No sparse-selection fallback:** numerical manuscript text says p<0.05. Old
    scripts instead replaced fewer than two selected variables with the top six.
    V2 does not add nonsignificant variables. With zero selected variables the selected

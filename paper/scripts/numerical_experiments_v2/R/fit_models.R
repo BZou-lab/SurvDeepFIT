@@ -135,7 +135,17 @@ fit_model <- function(method, train, features, config, threads = 1L) {
     AFT = fit_weibull_aft(formula, data),
     RSF = {
       require_package("randomForestSRC")
-      randomForestSRC::rfsrc(formula, data = data, ntree = config$models$rsf$ntree)
+      settings <- config$models$rsf
+      if (is.null(settings$importance)) {
+        # Preserve the original grow/subsample path when no RSF option is supplied.
+        randomForestSRC::rfsrc(formula, data = data, ntree = settings$ntree)
+      } else {
+        if (!settings$importance %in% c("anti", "permute", "random")) {
+          stop("RSF importance must be anti, permute, or random.")
+        }
+        randomForestSRC::rfsrc(formula, data = data, ntree = settings$ntree,
+                              importance = settings$importance, block.size = 1L)
+      }
     },
     XGBoost = {
       require_package("xgboost")
