@@ -11,6 +11,18 @@ network_controls <- function(config) {
        learning.rate.adaptive = "adam", plot = FALSE)
 }
 
+deep_prediction_generic <- function() {
+  require_package("deepTL")
+  generic <- methods::getGeneric("predict", where = asNamespace("deepTL"))
+  if (is.null(generic)) stop("The loaded deepTL build has no S4 prediction generic.")
+  generic
+}
+
+predict_deep_model <- function(model, newdata) {
+  generic <- deep_prediction_generic()
+  generic(model, as.matrix(newdata))
+}
+
 load_legacy_inference <- function(core_file) {
   for (package in c("deepTL", "magrittr", "survival", "Hmisc", "timeROC")) {
     require_package(package)
@@ -24,7 +36,67 @@ load_legacy_inference <- function(core_file) {
   core$rcorr.cens <- Hmisc::rcorr.cens
   core$timeROC <- timeROC::timeROC
   sys.source(core_file, envir = core)
+  # Namespace loading alone leaves unqualified predict() resolving to the S3 generic.
+  core$predict <- deep_prediction_generic()
   core
+}
+
+check_survdeepfit_dispatch <- function(core) {
+  # A hand-built one-hidden-layer network tests real package methods without training.
+  network <- methods::new("dnnet",
+    norm = list(x.center = c(0, 0), x.scale = c(1, 1), y.center = 0, y.scale = 1),
+    weight = list(diag(2), matrix(c(1, -0.5), ncol = 1)),
+    bias = list(matrix(0, 1, 2), matrix(0, 1, 1)),
+    loss = 0, loss.traj = 0, label = character(), model.type = "survival",
+    model.spec = list(activate = "relu", pathway = FALSE))
+  second <- network
+  second@bias[[2]] <- matrix(1, 1, 1)
+  ensemble <- methods::new("dnnetEnsemble", model.list = list(network, second),
+                           model.type = "survival", model.spec = network@model.spec,
+                           loss = c(0, 0), keep = c(TRUE, TRUE))
+  x <- matrix(c(1, 2, 2, 1, 3, 0), ncol = 2, byrow = TRUE,
+              dimnames = list(NULL, c("X1", "X2")))
+  input <- deepTL::importDnnetSurv(x = x, y = c(3, 2, 1), e = c(1, 1, 1))
+  expected <- c(0, 1.5, 3)
+  for (method in c("dnnet", "ensemble_dnnet")) {
+    model <- if (method == "dnnet") network else ensemble
+    target <- expected + if (method == "dnnet") 0 else 0.5
+    legacy <- core$predict_mod_permfit(model, input, method, "survival")
+    direct <- predict_deep_model(model, x)
+    if (!isTRUE(all.equal(as.numeric(legacy[[1]]), target)) ||
+        !isTRUE(all.equal(as.numeric(direct), target))) {
+      stop("deepTL prediction dispatch or values failed for ", method, ".")
+    }
+  }
+  risk <- predict_risk("SurvDeepFIT", ensemble, data.frame(x), colnames(x))
+  if (!isTRUE(all.equal(risk, expected + 0.5))) stop("V2 ensemble risk prediction failed.")
+  invisible(TRUE)
+}
+
+checked_aft_fit <- function(formula, data, ...) {
+  stage <- capture_stage(survival::survreg(formula, data = data, dist = "weibull", ...))
+  for (message in stage$warnings) warning(message, call. = FALSE)
+  if (!stage$ok) stop("AFT fit rejected: ", stage$error, call. = FALSE)
+  model <- stage$value
+  if (any(!is.finite(stats::coef(model))) || !is.finite(model$scale) || model$scale <= 0 ||
+      any(!is.finite(model$loglik)) || any(!is.finite(model$var)) || any(diag(model$var) <= 0)) {
+    stop("AFT fit has invalid coefficients, scale, likelihood, or covariance.")
+  }
+  model
+}
+
+fit_weibull_aft <- function(formula, data, control = survival::survreg.control()) {
+  null_formula <- stats::update.formula(formula, . ~ 1)
+  baseline <- checked_aft_fit(null_formula, data, control = control, score = TRUE)
+  matrix <- stats::model.matrix(stats::delete.response(stats::terms(formula, data = data)), data)
+  initial <- stats::setNames(rep(0, ncol(matrix) + 1L), c(colnames(matrix), "Log(scale)"))
+  initial["(Intercept)"] <- unname(stats::coef(baseline)["(Intercept)"])
+  initial["Log(scale)"] <- log(baseline$scale)
+  model <- checked_aft_fit(formula, data, init = unname(initial), control = control, score = TRUE)
+  attr(model, "aft_solver") <- list(initialization = "intercept_only", initial = initial,
+                                   null_iterations = baseline$iter, iterations = model$iter,
+                                   max_abs_score = max(abs(model$score)), control = control)
+  model
 }
 
 fit_model <- function(method, train, features, config, threads = 1L) {
@@ -33,7 +105,7 @@ fit_model <- function(method, train, features, config, threads = 1L) {
 
   model <- switch(method,
     Cox = survival::coxph(formula, data = data, x = TRUE, y = TRUE),
-    AFT = survival::survreg(formula, data = data, dist = config$models$aft$distribution),
+    AFT = fit_weibull_aft(formula, data),
     RSF = {
       require_package("randomForestSRC")
       randomForestSRC::rfsrc(formula, data = data, ntree = config$models$rsf$ntree)
@@ -63,6 +135,9 @@ fit_model <- function(method, train, features, config, threads = 1L) {
   }
   if (method == "AFT" && (!is.finite(model$scale) || model$scale <= 0)) {
     stop("AFT fit has an invalid scale.")
+  }
+  if (method == "RSF" && model$ntree != config$models$rsf$ntree) {
+    stop("RSF returned a different number of trees than requested.")
   }
   model
 }

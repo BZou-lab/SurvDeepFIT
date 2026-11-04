@@ -5,7 +5,7 @@ predict_risk <- function(method, model, data, features) {
     AFT = -stats::predict(model, newdata = newdata, type = "lp"),
     RSF = stats::predict(model, newdata = newdata)$predicted,
     XGBoost = stats::predict(model, xgboost::xgb.DMatrix(as.matrix(newdata)), outputmargin = TRUE),
-    SurvDeepFIT = stats::predict(model, as.matrix(newdata))
+    SurvDeepFIT = predict_deep_model(model, as.matrix(newdata))
   )
   prediction <- as.numeric(prediction)
   if (length(prediction) != nrow(data) || any(!is.finite(prediction))) {
@@ -93,8 +93,12 @@ evaluate_prediction <- function(method, model, train, test, features, times) {
     probabilities <- predict_survival(method, model, train, test, features, times)
     integrated_brier_score(test, probabilities, times)
   })
+  solver <- attr(model, "aft_solver")
   data.frame(cindex = cindex, ibs = if (ibs$ok) ibs$value else NA_real_,
              ibs_status = ibs$status, ibs_error = ibs$error,
              ibs_warnings = paste(ibs$warnings, collapse = " | "),
-             ibs_start = min(times), ibs_end = max(times))
+             ibs_start = min(times), ibs_end = max(times),
+             fit_initialization = if (is.null(solver)) NA_character_ else solver$initialization,
+             fit_iterations = if (is.null(solver)) NA_integer_ else solver$iterations,
+             fit_max_abs_score = if (is.null(solver)) NA_real_ else solver$max_abs_score)
 }

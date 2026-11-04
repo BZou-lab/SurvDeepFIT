@@ -3,6 +3,7 @@ root <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs()
                              winslash = "/"))
 source(file.path(root, "R/workflow.R"))
 source(file.path(root, "R/fit_models.R"))
+source(file.path(root, "R/evaluate_prediction.R"))
 
 main <- function(arguments) {
   options <- parse_options(arguments)
@@ -53,6 +54,8 @@ main <- function(arguments) {
     core <- load_legacy_inference(file.path(root, "../../../R/source_permfit_survival_20230610.r"))
     stopifnot(is.function(core$permfit_survival), is.function(deepTL::ensemble_dnnet))
     if (!methods::isClass("PermFIT")) stop("The loaded deepTL build does not register the PermFIT class.")
+    check_survdeepfit_dispatch(core)
+    cat("PASS: dnnet and dnnetEnsemble prediction through legacy and v2 paths (no training).\n")
   }
   if ("RSF" %in% selected && !"ntree" %in% names(formals(randomForestSRC::rfsrc))) {
     stop("Unexpected randomForestSRC interface: rfsrc has no ntree argument.")
@@ -61,7 +64,7 @@ main <- function(arguments) {
     for (name in c("xgb.DMatrix", "xgb.train", "xgb.importance")) getExportedValue("xgboost", name)
   }
   cat("PASS: configuration, package loading, and required interfaces for", paste(selected, collapse = ", "), "\n")
-  cat("No data generated or model fits performed. Package-specific training still requires the pilot.\n")
+  cat("No simulated data generated or model fits performed. Package-specific training still requires the pilot.\n")
 }
 
 main(commandArgs(trailingOnly = TRUE))

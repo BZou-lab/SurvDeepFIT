@@ -4,8 +4,8 @@ This framework implements the two scenario structures for SurvDeepFIT, Cox,
 Weibull AFT, RSF, and XGBoost. The current pilot uses half the manuscript effect
 coefficients and no sample-size scaling, as manually revised in the generator.
 The original numerical scripts and the package's
-`R/source_permfit_survival_20230610.r` are unchanged. No full simulations or SLURM
-jobs have been run as part of this refactor.
+`R/source_permfit_survival_20230610.r` are unchanged. A single-repetition Longleaf
+pilot has been reported; the full simulation study has not been launched here.
 
 ## Files
 
@@ -111,8 +111,9 @@ Rscript check_environment.R --config configs/scenario1.yaml
 ```
 
 The dependency check prints package versions, load failures, and library paths.
-It also loads the legacy inference definitions when SurvDeepFIT is requested, but
-does not execute them. To check only native Cox/AFT requirements, add
+For SurvDeepFIT, it also runs hand-built `dnnet`/`dnnetEnsemble` prediction fixtures
+through the real deepTL methods, legacy prediction helper, and v2 prediction adapter.
+It performs no model training or simulated-data generation. To check only native Cox/AFT requirements, add
 `--methods Cox,AFT`. The SLURM wrapper repeats the dependency check on its compute
 node and stops before fitting if it fails.
 
@@ -153,6 +154,68 @@ against the configured 1,000-repetition study. Rerunning the identical submissio
 retries failed stages and reuses successful ones. Keep its source, settings,
 environment, and thread count unchanged while it runs; use a new output directory
 after code changes. Size later resource requests from the pilot's measurements.
+
+### Corrections after pilot job 8039199
+
+The reported pilot passed Cox, RSF, and XGBoost, but failed SurvDeepFIT prediction
+dispatch and AFT convergence. The fixes preserve the generator, fitted families,
+hyperparameters, feature-selection rules, and legacy SurvDeepFIT inference:
+
+- **SurvDeepFIT:** namespace-only loading left unqualified legacy `predict()` calls
+  resolving to the S3 generic. V2 now binds the S4 prediction generic retrieved from
+  the deepTL namespace in the sourced legacy environment, and uses the same generic
+  for its own risk/survival predictions. The preflight fixtures catch this failure
+  without training a network or attaching packages to the global search path.
+- **AFT:** the full Weibull model now starts from a checked intercept-only fit,
+  with predictor coefficients initialized to zero and the fitted log-scale as its
+  starting scale parameter. Both fits must pass the existing warning guard and
+  finite-parameter/covariance checks. The likelihood, distribution, covariance
+  estimator, default 30-iteration budget, and convergence tolerances are unchanged.
+  Selection and all prediction refits use this helper. Increasing iterations alone
+  or accepting a nonconverged model is not the fix.
+- **Diagnostics:** AFT prediction rows now record initialization, iteration count,
+  and maximum absolute likelihood score. Full initialization/control details are
+  retained in the selection model's `aft_solver` attribute. RSF still uses native
+  subsampling and `ntree`; the returned tree count is now checked against the request.
+- **Environment:** the SLURM wrapper uses `Rscript --vanilla` for both preflight and
+  simulation. Activate the intended R environment first, with its library paths
+  exported (for example `R_LIBS_USER`). User/site R profiles and Renviron files are
+  ignored so an old `.Rprofile` cannot replace those paths. No user startup files
+  are edited. Use `Rscript --vanilla` for manual cluster checks too.
+
+Local reconstruction of the reported design/seed reproduced the rounded Cox
+C-index (0.6641). The default AFT initialization failed at 30 iterations; the new
+initialization converged in 6, with maximum score below 10^-6. A 100-iteration
+verification gave the same coefficients. Full/selected AFT prediction and IBS
+completed successfully locally. This reconstruction is not a check of the remote
+saved RDS, which is not present locally; Longleaf still needs the corrected pilot.
+The earlier AFT/RSF review note's initialization concern is therefore supported.
+Its separate legacy AFT `...` forwarding issue remains in the original package
+helper, which v2 native AFT fitting does not call. No package-level patch was made.
+
+After pushing locally and pulling on Longleaf, activate the same project R 4.5
+environment used for job 8039199. From this v2 directory, repeat only the two
+previously failed methods, in a **new** output root:
+
+```sh
+Rscript --vanilla check_environment.R --config configs/scenario1.yaml --methods SurvDeepFIT,AFT
+Rscript --vanilla validate.R
+mkdir -p results slurm/logs
+PILOT_OUTPUT="$(mktemp -d "$PWD/results/pilot-fixed-XXXXXXXX")"
+export PILOT_OUTPUT
+sbatch --array=1 --cpus-per-task=1 --mem=8G --time=12:00:00 \
+  --output=slurm/logs/pilot-fixed-%A_%a.out --error=slurm/logs/pilot-fixed-%A_%a.err \
+  slurm/run_simulation.slurm "$PWD/configs/scenario1.yaml" "$PILOT_OUTPUT" \
+  --n 1000 --rho 0 --methods SurvDeepFIT,AFT
+```
+
+Omit `--methods SurvDeepFIT,AFT` to repeat all five methods. The new root recreates
+the shared dataset with the same design/seed. Keep the original pilot for reference;
+do not aggregate old and corrected roots together. Unrequested methods will be
+listed as missing in coverage. After completion, use the summary command above
+with `$PILOT_OUTPUT`, and inspect selection, full/selected prediction, and IBS
+statuses; do not infer success from SLURM's exit code alone. Do not launch the full
+1,000-repetition study on the strength of this one pilot.
 
 ### Full study after pilot review
 
@@ -262,6 +325,7 @@ Confirmed implementation problems addressed locally in v2:
   was already correct). Weibull probabilities use the fitted AFT scale. Weibull
   misspecification under Gompertz survival is retained as a methodological choice;
   no robust covariance, alternative AFT family, or new inference is introduced.
+  The pilot correction changes numerical initialization only, as described above.
 - New local Breslow prediction uses the inclusive risk set `time >= event_time`,
   correcting the package helper's strict `>` denominator. The package helper itself
   is unchanged. Native RSF survival curves and native Weibull AFT probabilities
@@ -317,7 +381,8 @@ aggregation. It does not statistically validate the legacy p-values, estimate po
 or run ensembles/forests/boosting. Validate those package-specific adapters in the
 intended Longleaf environment before running the full study.
 
-The native Cox/AFT adapter checks use a separate deterministic Weibull fixture.
+The native Cox/AFT adapter checks use a separate deterministic Weibull fixture,
+and AFT is additionally checked on the reconstructed n=1,000, rho=0 pilot dataset.
 The revised halved/unscaled Gompertz smoke dataset produced an AFT convergence
 warning locally on 2026-11-03, and the failure guard correctly rejected it.
 The model and convergence policy were not changed to accommodate that failure.
@@ -330,5 +395,9 @@ SurvDeepFIT's dependencies, RSF, or XGBoost; those adapters were not trained.
 On 2026-11-03, the updated validation suite and native-only dependency check passed,
 and Bash's syntax-only check passed for the SLURM wrapper. The all-method dependency
 check correctly rejected incompatible local compiled dependencies before fitting.
-Execution on Longleaf remains to be tested. No packages were installed and no jobs
-were submitted.
+The revised suite passed with survival 3.5.8 under local R 4.4 and survival 3.8.6
+under R 4.6. The R 4.6 environment also passed real deepTL prediction fixtures and
+all-method preflight (deepTL 1.0.0, Hmisc 5.3.0, timeROC 0.4.1, randomForestSRC 3.7.0,
+xgboost 3.2.1.1). No ensemble, forest, or boosting training was used for these fixes.
+Corrected execution on Longleaf remains to be tested. No packages were installed
+and no jobs were submitted here.

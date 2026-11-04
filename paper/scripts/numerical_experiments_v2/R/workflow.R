@@ -250,7 +250,8 @@ run_method <- function(method, data, config, task_state, directory, context,
       stage <- checkpoint$stage
       row <- if (stage$ok) stage$value else data.frame(
         cindex = NA_real_, ibs = NA_real_, ibs_status = "not_run", ibs_error = "",
-        ibs_warnings = "", ibs_start = NA_real_, ibs_end = NA_real_)
+        ibs_warnings = "", ibs_start = NA_real_, ibs_end = NA_real_,
+        fit_initialization = NA_character_, fit_iterations = NA_integer_, fit_max_abs_score = NA_real_)
       row$feature_set <- feature_set
       row$status <- stage$status
       row$error <- stage$error

@@ -7,6 +7,7 @@ require_package("survival")
 
 for (file in list.files(root, "\\.R$", recursive = TRUE, full.names = TRUE)) parse(file)
 config <- read_config(file.path(root, "configs/scenario1.yaml"))
+pilot_config <- config
 second <- read_config(file.path(root, "configs/scenario2.yaml"))
 stopifnot(identical(config[names(config) != "scenario"], second[names(second) != "scenario"]))
 
@@ -82,6 +83,34 @@ for (method in c("Cox", "AFT")) {
             prediction$ibs >= 0, prediction$ibs <= 1)
 }
 
+# Exercise the pilot-sized AFT fit using the reported setting and RNG stream.
+# This is one inexpensive native fit; no DNN/forest/boosting training is involved.
+pilot_data <- generate_data(pilot_config, 1000, 0, task_rng(pilot_config, 1, 1))
+aft <- capture_stage(fit_model("AFT", pilot_data$train, pilot_data$feature_names, pilot_config))
+if (!aft$ok) stop("Pilot-sized AFT regression check failed: ", aft$error,
+                  " ", paste(aft$warnings, collapse = "; "))
+solver <- attr(aft$value, "aft_solver")
+stopifnot(solver$initialization == "intercept_only", solver$max_abs_score < 0.001,
+          all(solver$initial[pilot_data$feature_names] == 0),
+          aft$value$loglik[2] >= aft$value$loglik[1])
+formula <- stats::as.formula("Surv(time, status) ~ .", env = asNamespace("survival"))
+aft_longer <- fit_weibull_aft(formula, pilot_data$train, survival::survreg.control(maxiter = 100))
+stopifnot(isTRUE(all.equal(stats::coef(aft$value), stats::coef(aft_longer), tolerance = 1e-7)))
+rejected <- capture_stage(fit_weibull_aft(formula, pilot_data$train,
+                                        survival::survreg.control(maxiter = 1)))
+stopifnot(!rejected$ok)
+cat("PASS: pilot-sized Weibull AFT converges from intercept-only initialization; failed fits remain rejected.\n")
+
+# Namespace-only deepTL loading must support both legacy inference and v2 predictions.
+if (requireNamespace("deepTL", quietly = TRUE) && requireNamespace("Hmisc", quietly = TRUE) &&
+    requireNamespace("timeROC", quietly = TRUE) && requireNamespace("magrittr", quietly = TRUE)) {
+  core <- load_legacy_inference(file.path(root, "../../../R/source_permfit_survival_20230610.r"))
+  check_survdeepfit_dispatch(core)
+  cat("PASS: real dnnet/dnnetEnsemble prediction fixtures without training.\n")
+} else {
+  cat("SKIP: deepTL prediction fixtures need loadable deepTL, Hmisc, timeROC, and magrittr.\n")
+}
+
 # Exact fixtures: inclusive Breslow denominator, risk direction, and uncensored IBS.
 train <- data.frame(time = c(1, 2, 3), status = c(1, 1, 0))
 probability <- cox_survival_probabilities(train, rep(0, 3), 0, c(0.5, 1, 2, 3))
@@ -109,7 +138,8 @@ mock$fit_feature_selection <- function(...) {
 mock$fit_model <- function(...) list()
 mock$evaluate_prediction <- function(...) data.frame(
   cindex = 0.7, ibs = 0.15, ibs_status = "ok", ibs_error = "", ibs_warnings = "",
-  ibs_start = 1, ibs_end = 2)
+  ibs_start = 1, ibs_end = 2, fit_initialization = NA_character_,
+  fit_iterations = NA_integer_, fit_max_abs_score = NA_real_)
 validation_root <- file.path(root, "results", "validation")
 dir.create(validation_root, recursive = TRUE, showWarnings = FALSE)
 directory <- tempfile("smoke-", tmpdir = validation_root)
@@ -117,7 +147,8 @@ context <- list(scenario = 1, n_train = 120, n_test = 24, rho = 0, repetition = 
 for (i in 1:3) {
   mock$run_method("Cox", data, config, seed, directory, context, "smoke", "unused", 1)
   if (i == 1) {
-    failed_summary <- summarize_records(list(readRDS(file.path(directory, "result.rds"))))
+    failed_record <- readRDS(file.path(directory, "result.rds"))
+    failed_summary <- summarize_records(list(failed_record))
     stopifnot(failed_summary$feature_recovery$n_attempted == 1,
               failed_summary$feature_recovery$n_missing_type1_error == 1,
               all(failed_summary$prediction_summary$n_missing_cindex == 1))
@@ -126,9 +157,12 @@ for (i in 1:3) {
 stopifnot(mock$calls == 2L)
 record <- readRDS(file.path(directory, "result.rds"))
 stopifnot(record$selection_status == "ok", nrow(record$predictions) == 2)
-summary <- summarize_records(list(record))
+failed_record$context$repetition <- 2
+summary <- summarize_records(list(record, failed_record))
 write_summary(summary, file.path(directory, "summary"))
 stopifnot(summary$feature_recovery$mean_average_power == 1,
+          summary$feature_recovery$n_attempted == 2,
+          summary$feature_recovery$n_missing_average_power == 1,
           nrow(readRDS(file.path(directory, "summary/summary.rds"))$prediction_summary) == 2,
           file.exists(file.path(directory, "summary/feature_rates.csv")),
           inherits(try(read_checkpoint(file.path(directory, "selection.rds"), "changed"), silent = TRUE), "try-error"))
