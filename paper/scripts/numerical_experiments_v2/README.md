@@ -9,8 +9,9 @@ and nonparametric subsampling p-values (`var.sel`, p < 0.05). The diagnostic
 explicitly preserves the original anti arm for comparison.
 
 This framework implements the two scenario structures for SurvDeepFIT, Cox,
-Weibull AFT, RSF, and XGBoost. The current generator uses the manuscript effect
-coefficients with no sample-size scaling, doubled from the previous pilot design.
+Weibull AFT, RSF, and XGBoost. The current generator multiplies all original effect
+coefficients by 0.8, matching the completed `test20-effect08-20261106-6b6sjc6s`
+pilot, with no sample-size scaling.
 The original numerical scripts and the package's
 `R/source_permfit_survival_20230610.r` are unchanged. A single-repetition Longleaf
 pilot has been reported; the full simulation study has not been launched here.
@@ -47,8 +48,23 @@ training sizes 1,000/3,000, correlations 0/0.3/0.5, and block size 10 (50 predic
 `test_fraction: 0.2` means **test size / training size**: 200/600 independent test
 subjects, not a 20% split of total observations. The current effects are:
 
-- Scenario 1: `0.2*X1 + 0.4*X11 + 0.6*X21 + 0.8*X31 + Z1`.
-- Scenario 2: `Z1 + 2*X1*Z2 + 0.5*X11^2 + X21*X31`.
+- Scenario 1: `0.16*X1 + 0.32*X11 + 0.48*X21 + 0.64*X31 + 0.8*Z1`.
+- Scenario 2: `0.8*Z1 + 1.6*X1*Z2 + 0.4*X11^2 + 0.8*X21*X31`.
+
+For both scenarios, the 40 continuous features form four independent Gaussian
+blocks (`X1:X10`, `X11:X20`, `X21:X30`, `X31:X40`). Each block has mean zero,
+unit marginal variances, and common within-block correlation `rho`.
+The ten binary features `Z1:Z10` are independent Bernoulli(0.4) draws,
+independent of the continuous features. All 50 original features are model inputs.
+
+Given the scenario's log-risk `eta`, event times follow the proportional-hazards
+Gompertz model `h(t | X,Z) = 0.00002 * exp(3*t) * exp(eta)` for `t >= 0`.
+With independent `U ~ Uniform(0,1)`, the generator uses
+`T = log(1 + (3 / 0.00002) * (-log(U)) * exp(-eta)) / 3`, evaluated stably.
+Independent censoring times are Weibull with shape 1.5 and scale 3.5.
+The observed outcome is `time = min(T,C)` and `status = 1(T <= C)`.
+The censoring distribution is fixed; the realized censoring fraction can differ
+by scenario, correlation, and effect strength.
 
 The former `1 / sqrt(n_train / 1000)` scaling is disabled, so both training
 sizes use the same coefficients. The absence of scaling differs from the manuscript.

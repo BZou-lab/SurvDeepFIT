@@ -25,6 +25,9 @@ generate_data <- function(config, n_train, rho, rng_state) {
         features[[paste0("X", 3 * block_size + 1)]]
     }
 
+    # Scale every linear, nonlinear, and interaction effect by 0.8.
+    log_risk <- 0.8 * log_risk
+
     # Effect coefficients are fixed across training sample sizes (no n-dependent scaling).
 
     # Exact inversion of the manuscript's Gompertz cumulative hazard.
