@@ -9,7 +9,7 @@ planned_repetitions <- max(summary$coverage$n_expected)
 format_value <- function(x, digits) {
   if (length(x) != 1 || !is.finite(x)) "NA" else formatC(x, format = "f", digits = digits)
 }
-for (scenario in 1:2) {
+for (scenario in sort(unique(summary$coverage$scenario))) {
   important <- c("X1", "X11", "X21", "X31", "Z1", if (scenario == 2) "Z2")
   rows <- list()
   markdown <- c(sprintf("# Scenario %d: feature selection (%d planned repetitions)", scenario, planned_repetitions),
@@ -43,4 +43,5 @@ for (scenario in 1:2) {
   write.csv(do.call(rbind, rows), file.path(output, sprintf("feature_selection_scenario%d.csv", scenario)), row.names = FALSE)
   writeLines(markdown, file.path(output, sprintf("feature_selection_scenario%d.md", scenario)))
 }
-message("Wrote manuscript-style feature-selection tables for both scenarios.")
+message("Wrote manuscript-style feature-selection tables for scenarios: ",
+        paste(sort(unique(summary$coverage$scenario)), collapse = ", "), ".")

@@ -13,8 +13,17 @@ Weibull AFT, RSF, and XGBoost. The current generator multiplies all original eff
 coefficients by 0.8, matching the completed `test20-effect08-20261106-6b6sjc6s`
 pilot, with no sample-size scaling.
 The original numerical scripts and the package's
-`R/source_permfit_survival_20230610.r` are unchanged. A single-repetition Longleaf
-pilot has been reported; the full simulation study has not been launched here.
+`R/source_permfit_survival_20230610.r` are unchanged. The full simulation study
+and its final summary completed on November 17, 2026.
+
+The completed 1,000-repetition run is saved locally on Longleaf in
+`results/full1000-effect08-20261107-xkm0oash/`, relative to this README's directory.
+It contains all 12,000 repetitions across both scenarios, training sizes
+1,000/3,000, and correlations 0/0.3/0.5. Individual outputs are organized under
+`runs/scenario{1,2}/n{1000,3000}/rho{0,0.3,0.5}/rep0001/` through `rep1000/`.
+Within the run directory, final summaries are in `runs/summary/`, prediction
+figures in `figures/`, and feature-selection LaTeX tables in `tables/`.
+These generated results are ignored by Git and are not included on GitHub.
 
 ## Files
 
@@ -103,6 +112,56 @@ smoke results, not manuscript estimates. Default SurvDeepFIT settings are expens
 processes every configured repetition; do not do that as a dependency check.
 
 ## Longleaf
+
+### Summarize a completed scenario separately
+
+`summarize_scenario.R` reads only the requested scenario and writes the usual
+coverage, feature-selection, and prediction CSV/RDS summaries, a manuscript-style
+feature-selection table, and `overview.csv`/`overview.md`. For example:
+
+```sh
+Rscript summarize_scenario.R --input /absolute/study/runs --scenario 1 \
+  --output /absolute/study/runs/summary_scenario1
+```
+
+`slurm/summarize_scenario.slurm` wraps this command for a compute node (one CPU,
+16 GB RAM, four hours); its positional arguments are script root, study runs,
+scenario number, and output directory. This separate summary does not change
+the running simulations or their scheduled full summary. The script reserves
+the `summary/` output name for the full summary and reports missing/failed results.
+
+### Full 1,000-repetition run (completed)
+
+`slurm/run_full1000.slurm` specifies the `rc_bzou_pi` account and `general`
+partition, 12,000 array tasks, and at most 250 running tasks. It covers both
+scenarios, training sizes 1,000/3,000, correlations 0/0.3/0.5, and repetitions
+1 through 1,000. Each task runs all five methods on one shared dataset, with
+full and selected-feature prediction evaluation. The generator uses the 0.8
+effects described above. The existing config base seed is retained.
+
+Each task requests one CPU, 4 GB RAM, one AMD/AVX-512 node, and a **24-hour
+per-task limit**. The completed 0.8 pilot's slowest task took 4:27:19 according
+to `/usr/bin/time` (4:27:27 including SLURM task overhead). Its 240 tasks used
+393.26 task-hours; multiplying by 50 gives about 19,663 task-hours, or 78.65 hours
+(3.3 days) at a sustained 250 concurrent tasks, before scheduling delays and
+the final tasks finishing. The array can run for several days even though
+each individual task has a 24-hour limit.
+
+Before submission, freeze the reviewed source and configs in a new study
+directory, preserving `R/source_permfit_survival_20230610.r` at its relative
+location, and record source hashes, package versions, commands, and job IDs.
+Create a new output directory and its sibling `logs/` directory. Pass absolute
+paths to the frozen simulation root and output directory, overriding both
+`--output` and `--error` with paths under that study's logs directory.
+Do not reuse a pilot output directory. The completed run used array job
+`8472445` and dependent summary job `8472446`.
+
+After submitting the array, `slurm/summarize_test50.slurm` can summarize the full
+run: it reads the recorded configs/repetition counts rather than assuming 50.
+Use an `afterany:ARRAY_JOB_ID` dependency, one CPU, 32 GB RAM, and a 4-hour time
+limit for that separate summary job so missing/failed results remain visible.
+The completed Scenario 1 summary peaked at approximately 11.2 GB; the full
+summary job's memory request was increased from 4 GB to 32 GB on November 13.
 
 Prepare the desired R environment using Longleaf's current module/environment
 instructions. No module name, account, partition, GPU, or environment path is
