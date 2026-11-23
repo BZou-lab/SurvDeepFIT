@@ -8,19 +8,19 @@ if (length(args) != 2L || args[1] != "--study") {
 }
 study_dir <- normalizePath(args[2], winslash = "/", mustWork = TRUE)
 figure_dir <- file.path(study_dir, "figures")
-method_levels <- c("SurvDeepFIT", "Cox", "AFT", "RSF", "XGBoost")
+method_levels <- c("SurvDeepFIT", "Cox", "AFT", "RSF")
 method_colors <- c(SurvDeepFIT = "#D55E00", Cox = "#56B4E9", AFT = "#009E73",
-                   RSF = "#E69F00", XGBoost = "#CC79A7")
+                   RSF = "#E69F00")
 raw <- read.csv(file.path(study_dir, "runs/summary/prediction_results.csv"))
-selected <- subset(raw, feature_set == "selected")
+selected <- subset(raw, feature_set == "selected" & Method %in% method_levels)
 expected <- expand.grid(scenario = 1:2, n = c(1000, 3000), rho = c(0, 0.3, 0.5),
                         Method = method_levels, repetition = 1:1000,
                         stringsAsFactors = FALSE)
 key <- function(d) do.call(paste, c(d[c("scenario", "n", "rho", "Method", "repetition")], sep = "/"))
-stopifnot(nrow(selected) == 60000L, !anyDuplicated(key(selected)),
+stopifnot(nrow(selected) == nrow(expected), !anyDuplicated(key(selected)),
           setequal(key(selected), key(expected)))
 reference <- subset(read.csv(file.path(study_dir, "runs/summary/prediction_summary.csv")),
-                    feature_set == "selected")
+                    feature_set == "selected" & Method %in% method_levels)
 group_key <- function(d) do.call(paste, c(d[c("scenario", "n", "rho", "Method")], sep = "/"))
 
 make_figure <- function(metric, label, stem) {
@@ -38,7 +38,7 @@ make_figure <- function(metric, label, stem) {
   }))
   rownames(df) <- NULL
   matched <- match(group_key(df), group_key(reference))
-  stopifnot(!anyNA(matched), nrow(df) == 60L,
+  stopifnot(!anyNA(matched), nrow(df) == 12L * length(method_levels),
             isTRUE(all.equal(df$Mean, reference[[paste0("mean_", metric)]][matched], tolerance = 1e-12)),
             isTRUE(all.equal(df$SD, reference[[paste0("sd_", metric)]][matched], tolerance = 1e-12)),
             all(df$repetitions == reference[[paste0("n_valid_", metric)]][matched]))

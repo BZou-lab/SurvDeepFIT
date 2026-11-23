@@ -9,7 +9,7 @@ study <- normalizePath(args[2], winslash = "/", mustWork = TRUE)
 input <- file.path(study, "runs", "summary")
 output <- file.path(study, "tables")
 dir.create(output, showWarnings = FALSE)
-methods <- c("SurvDeepFIT", "AFT", "Cox", "RSF", "XGBoost")
+methods <- c("SurvDeepFIT", "Cox", "AFT", "RSF")
 labels <- c(X1 = "$X_1$", X11 = "$X_{p_0+1}$", X21 = "$X_{2p_0+1}$",
             X31 = "$X_{3p_0+1}$", Z1 = "$Z_1$", Z2 = "$Z_2$",
             "Avg Power" = "Avg Power", "Type I Error" = "Type I Error",
@@ -35,13 +35,13 @@ for (scenario in 1:2) {
     "% \\usepackage{booktabs}",
     "% \\usepackage{arydshln}",
     "% Use table* for a full-width table in a two-column manuscript.",
-    "\\begin{table*}[p]", "\\centering",
+    "\\begin{table*}[htbp]", "\\centering",
     paste0("\\caption{", caption, "}"),
     sprintf("\\label{tab:simulation-feature-selection-scenario%d}", scenario),
     "\\vspace{4pt}",
     "\\begingroup", "\\scriptsize", "\\sffamily",
     "\\setlength{\\tabcolsep}{4pt}", "\\renewcommand{\\arraystretch}{1.03}",
-    "\\begin{tabular}{llccccc}")
+    "\\begin{tabular}{llcccc}")
   for (n in c(1000, 3000)) {
     letter <- if (n == 1000) "a" else "b"
     if (tail(tex, 1L) == "\\hline") {
@@ -50,12 +50,12 @@ for (scenario in 1:2) {
       tex <- c(tex, "\\midrule")
     }
     tex <- c(tex,
-      sprintf("\\multicolumn{7}{c}{\\textbf{Scenario %d%s:} $n=%s$} \\\\",
+      sprintf("\\multicolumn{6}{c}{\\textbf{Scenario %d%s:} $n=%s$} \\\\",
               scenario, letter, if (n == 1000) "1{,}000" else "3{,}000"),
-      "\\midrule",
+      "\\hline",
       paste0("$\\rho$ & \\textbf{Feature} & ",
         paste(paste0("\\textbf{", methods, "}"), collapse = " & "), " \\\\"),
-      "\\midrule")
+      "\\hline")
     for (rho in c(0, 0.3, 0.5)) {
       for (metric in metrics) {
         row <- data[data$n == n & data$rho == rho & data$metric == metric, ]
@@ -63,9 +63,7 @@ for (scenario in 1:2) {
         digits <- if (metric == "Avg Rank Sum") 2L else 3L
         values <- vapply(methods, function(method) {
           x <- row[[method]]
-          if (!is.finite(x)) {
-            if (method == "XGBoost") "\\textemdash{}" else "NA"
-          } else sprintf(paste0("%.", digits, "f"), x)
+          if (!is.finite(x)) "NA" else sprintf(paste0("%.", digits, "f"), x)
         }, character(1))
         if (metric == "Avg Power") tex <- c(tex, "\\hdashline[0.5pt/1.5pt]")
         tex <- c(tex,
